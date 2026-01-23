@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ВАЖНО: Git правила
+
+- **После выполнения любой задачи ВСЕГДА делать commit и push в git автоматически.**
+- **Сообщения коммитов ВСЕГДА писать на русском языке.**
+
 ## Project Overview
 
 Frontol Server - Node.js/TypeScript service that bridges Frontol 6 POS system (Firebird database) with Magday backend. Runs on POS terminal as a PM2 service, continuously syncs offline orders to the web system.
