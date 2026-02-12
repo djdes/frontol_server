@@ -32,12 +32,10 @@ export interface Order {
 	SUMMWD: number;
 	products: any[];
 	isCardPayment: boolean;
-	lastOrderUpdate: string;
 }
 const innerState = {
 	eventListenerinProgress: false,
 	checkOrdersUpdatesInProgress: false,
-	isFirstStart: true,
 };
 
 const clearEmptyOrders = (_orders: Order[]) => {
@@ -109,7 +107,6 @@ const prepareOrderData = async (_orders: Orders) => {
 				products: order.products,
 				isCardPayment: order.isCardPayment,
 				CHEQUENUMBER: order.CHEQUENUMBER,
-				lastOrderUpdate: order.LAST_ORDER_UPDATE,
 			});
 			continue;
 		}
@@ -148,7 +145,6 @@ const prepareOrderData = async (_orders: Orders) => {
 			products: products,
 			isCardPayment: _order.isCardPayment,
 			CHEQUENUMBER: _order.CHEQUENUMBER,
-			lastOrderUpdate: _order.LAST_ORDER_UPDATE,
 		});
 	} //end for
 
@@ -169,21 +165,15 @@ export const getOrder = async (id: number) => {
 	return orders[0];
 };
 
-export const getOrdersFromDate = async (date: string) => {
+export const getOrdersSinceId = async (lastId: number) => {
 	const orders: any = await DbRequest(
-		`SELECT first 10000 * FROM DOCUMENT WHERE STATE = 1 AND last_order_update > '${date}' ORDER BY last_order_update desc`
+		`SELECT first 10000 * FROM DOCUMENT WHERE STATE = 1 AND ID > ${lastId} ORDER BY ID`
 	);
 	if (orders) {
-		console.log(
-			"getOrdersFromDate date orders.length",
-			date,
-			orders?.length
-		);
+		console.log("getOrdersSinceId lastId orders.length", lastId, orders?.length);
 	}
-	// saveToFile("debug/orders_selected", orders);
 	return orders;
 };
-// getOrdersFromDate(`2020-11-01T22:00:00.000Z`);
 
 const sendToSite = async (_data: Orders) => {
 	if (debug) saveToFile(`debug/data`, _data);
@@ -204,47 +194,41 @@ const sendToSite = async (_data: Orders) => {
 	});
 	// .then(res => res.text()).then((res)=>{console.log("res" , res)});
 };
-const getState = async () => {
+const getState = async (): Promise<{ lastId: number }> => {
 	let state: any = await readFile("state");
-	// console.log("state", state);
-	if (state.error || !state.lastTimeUpdate) {
-		const stateBackup: any = await readFile("stateBackup");
-		if (stateBackup.error) {
-			// console.log("stateBackup state.error", stateBackup.error);
-		} else {
-			// console.log("stateBackup", stateBackup, stateBackup.lastTimeUpdate);
-			await saveToFile("state", stateBackup);
-			state = stateBackup;
-		}
-	}
-	console.log("initial state", state);
-	if (innerState.isFirstStart) {
-		const date = new Date(state.lastTimeUpdate);
-		let dayNow: any = date.getDate();
-		if (dayNow < 10) {
-			dayNow = "0" + dayNow;
-		}
-		let monthNow: any = date.getMonth() + 1;
-		if (monthNow < 10) {
-			monthNow = "0" + monthNow;
-		}
-		date.setDate(date.getDate() - 1);
-		let day: any = date.getDate();
-		if (day < 10) {
-			day = "0" + day;
-		}
-		let month: any = date.getMonth() + 1;
-		if (month < 10) {
-			month = "0" + month;
-		}
-		state.lastTimeUpdate = state.lastTimeUpdate
-			.replace(`-${monthNow}-`, `-${month}-`)
-			.replace(`-${dayNow} `, `-${day} `);
-		console.log("initial state - isFirstStart", state);
-		innerState.isFirstStart = false;
+
+	// Valid new format
+	if (!state.error && (state.lastId || state.lastId === 0)) {
+		console.log("initial state", state);
+		return state;
 	}
 
-	return state;
+	// Try backup
+	const stateBackup: any = await readFile("stateBackup");
+	if (!stateBackup.error && (stateBackup.lastId || stateBackup.lastId === 0)) {
+		await saveToFile("state", stateBackup);
+		console.log("initial state (from backup)", stateBackup);
+		return stateBackup;
+	}
+
+	// Migration from old timestamp format or fresh start
+	// Get current max ID to avoid reprocessing all historical orders
+	try {
+		const result: any = await DbRequest(
+			`SELECT MAX(ID) as MAX_ID FROM DOCUMENT WHERE STATE = 1`
+		);
+		const maxId = result?.[0]?.MAX_ID || 0;
+		console.log(`State migration: setting lastId to current max ID: ${maxId}`);
+		const newState = { lastId: maxId };
+		await saveToFile("state", newState);
+		await saveToFile("stateBackup", newState);
+		return newState;
+	} catch (err) {
+		console.error("Failed to query max ID for migration, starting from 0:", err);
+		const newState = { lastId: 0 };
+		await saveToFile("state", newState);
+		return newState;
+	}
 };
 
 const checkOrdersUpdatesOnce = async () => {
@@ -256,41 +240,33 @@ const checkOrdersUpdatesOnce = async () => {
 };
 const checkOrdersUpdates = async () => {
 	const state = await getState();
-	let lastTimeUpdate = state.lastTimeUpdate;
-	console.log("lastTimeUpdate", lastTimeUpdate);
-	const orders = (await getOrdersFromDate(lastTimeUpdate)) as
+	const lastId = state.lastId;
+	console.log("lastId", lastId);
+
+	const orders = (await getOrdersSinceId(lastId)) as
 		| Array<tables.RootObject>
 		| false;
 	if (orders === false) return;
 	if (orders.length > 0) {
-		// await saveToFile("debug/__orders", orders);
-		// const _lastTimeUpdate = orders[orders.length - 1].LAST_ORDER_UPDATE;
-		const _lastTimeUpdate = orders.sort((x, z) => {
-			return (
-				// @ts-ignore
-				new Date(z.LAST_ORDER_UPDATE) - new Date(x.LAST_ORDER_UPDATE)
-			);
-		})[0].LAST_ORDER_UPDATE;
-		await saveToFile("state", { lastTimeUpdate: _lastTimeUpdate });
+		const maxId = Math.max(...orders.map((o) => o.ID));
+		await saveToFile("state", { lastId: maxId });
 		setTimeout(() => {
-			saveToFile("stateBackup", { lastTimeUpdate: _lastTimeUpdate });
+			saveToFile("stateBackup", { lastId: maxId });
 		}, 10000);
-		// console.log("_lastTimeUpdate", lastTimeUpdate, _lastTimeUpdate);
 
 		for (let i = 0; i < orders.length; i++) {
-			console.log("eventListener order", orders[i].CHEQUENUMBER);
+			console.log("eventListener order", orders[i].CHEQUENUMBER, "ID:", orders[i].ID);
 			orders[i].products = await getProductsByOrderId(orders[i].ID);
 			orders[i].isCardPayment = await isCardPayment(orders[i].ID);
-			// if (orders[i].CHEQUENUMBER == 7528) {
-			// 	console.log("CHEQUENUMBER == 7528", orders[i]);
-			// }
 		}
+
 		const _orders: Orders = [];
 		orders.forEach((_order) => {
 			if (_order.products.length > 0) {
 				_orders.push(_order);
 			}
 		});
+
 		await saveToFile("debug/orders", orders);
 		if (_orders.length > 0) {
 			return _orders;
@@ -335,7 +311,7 @@ const eventListener = async () => {
 	}, 5000);
 };
 const main = () => {
-	console.log(`version:1.8.23`);
+	console.log(`version:1.9.0`);
 	eventListener();
 };
 main();

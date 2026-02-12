@@ -32,7 +32,17 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Init database (add column and trigger if needed)
+      - name: Ensure config.json exists
+        run: |
+          if (-not (Test-Path "config.json")) {
+            Copy-Item "config.example.json" "config.json"
+            Write-Host "Created config.json from template"
+          } else {
+            Write-Host "config.json already exists"
+          }
+        shell: powershell
+
+      - name: Database health check
         run: node build/init.js
         continue-on-error: true
 

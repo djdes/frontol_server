@@ -65,7 +65,7 @@ Logs location:
 
 ## Configuration Files
 
-### config.json
+### config.json (не трекается в git, шаблон в config.example.json)
 ```json
 {
   "userId": 25,                    // WooCommerce user ID for orders
@@ -73,17 +73,17 @@ Logs location:
 }
 ```
 
-User IDs:
+User IDs (разные машины):
 - `24` = frontol2 (Выпечка)
 - `25` = frontol3 (Мясо)
 
-### state.json / stateBackup.json
+### state.json / stateBackup.json (не трекаются в git)
 ```json
 {
-  "lastTimeUpdate": "2022-07-22 18:01:05.1180"
+  "lastId": 12345
 }
 ```
-Tracks last processed order timestamp for incremental sync.
+Tracks last processed order ID for incremental sync.
 
 ## Firebird Database Connection
 
@@ -116,8 +116,8 @@ setInterval(async () => {
 ### 2. Query Orders
 ```sql
 SELECT first 10000 * FROM DOCUMENT
-WHERE STATE = 1 AND last_order_update > '${lastTimeUpdate}'
-ORDER BY last_order_update desc
+WHERE STATE = 1 AND ID > ${lastId}
+ORDER BY ID
 ```
 
 ### 3. Order Processing
@@ -145,8 +145,7 @@ ORDER BY last_order_update desc
           "priceBase": 520.00                  // SUMM
         }
       ],
-      "isCardPayment": true,
-      "lastOrderUpdate": "2022-07-22 18:01:05"
+      "isCardPayment": true
     }
   ],
   "userId": 25
@@ -165,7 +164,6 @@ interface Order {
   SUMMWD: number;
   products: Product[];
   isCardPayment: boolean;
-  lastOrderUpdate: string;
 }
 
 interface Product {
@@ -184,10 +182,11 @@ interface Product {
 |----------|-------------|
 | `main()` | Entry point, starts polling |
 | `eventListener()` | Sets up 5-second polling interval |
-| `checkOrdersUpdatesOnce()` | Queries new orders since last timestamp |
+| `checkOrdersUpdatesOnce()` | Queries new orders since last ID |
 | `prepareOrderData()` | Transforms raw data, handles cancellations |
 | `sendToSite()` | POSTs orders to backend |
-| `getState()` | Reads last timestamp from state.json |
+| `getState()` | Reads last ID from state.json, migrates old format |
+| `getOrdersSinceId()` | Fetches orders with ID > lastId |
 | `saveToFile()` | Persists state |
 
 ### src/tools.ts
@@ -200,14 +199,7 @@ interface Product {
 
 ### src/init.ts
 
-Creates Firebird trigger for `last_order_update` column:
-```sql
-CREATE TRIGGER on_orders_change FOR DOCUMENT
-BEFORE INSERT OR UPDATE AS
-BEGIN
-  new.last_order_update = CURRENT_TIMESTAMP;
-END
-```
+Database health check — verifies Firebird connectivity on deploy.
 
 ## Debugging
 
@@ -220,7 +212,7 @@ Set `debug = true` in src/index.ts to enable:
 Useful debug functions:
 ```typescript
 getOrder(309202)                    // Fetch specific order
-getOrdersFromDate("2022-07-22")     // Orders since date
+getOrdersSinceId(0)                 // Orders since ID
 saveAllCols()                       // Export all table samples
 ```
 
@@ -253,7 +245,7 @@ pm2 restart frontol-server
 State backup system:
 - `state.json` corrupted → falls back to `stateBackup.json`
 - stateBackup updated with 10-second delay for atomicity
-- On first start, looks back 1 day to catch missed orders
+- On migration from old format: queries MAX(ID) to start from current point
 
 Concurrent operation prevention:
 - `innerState.eventListenerinProgress` flag
@@ -269,7 +261,7 @@ pm2 logs frontol-server --lines 50
 ```
 
 ### Orders not syncing
-1. Check state.json timestamp
+1. Check state.json lastId
 2. Verify Firebird database path in config.json
 3. Test backend endpoint manually:
 ```bash
@@ -289,15 +281,16 @@ frontol_server/
 ├── src/
 │   ├── index.ts          # Main logic, polling, data processing
 │   ├── tools.ts          # Database utilities
-│   ├── init.ts           # Firebird trigger initialization
+│   ├── init.ts           # Database health check
 │   └── types/
 │       └── DOCUMENT.d.ts # Full DOCUMENT table schema
 ├── build/                # Compiled JavaScript
 ├── logs/                 # PM2 logs
 ├── debug/                # Debug output (when enabled)
-├── config.json           # Database path, user ID
-├── state.json            # Last sync timestamp
-├── stateBackup.json      # Backup timestamp
+├── config.json           # Database path, user ID (not in git)
+├── config.example.json   # Config template (in git)
+├── state.json            # Last sync ID (not in git)
+├── stateBackup.json      # Backup ID (not in git)
 ├── ecosystem.config.js   # PM2 configuration
 ├── tsconfig.json         # TypeScript config
 └── package.json

@@ -1,20 +1,11 @@
-import { DbRequest, createTrigger, deleteTrigger } from "./tools";
+import { DbRequest } from "./tools";
 (async () => {
 	try {
-		await DbRequest(`ALTER TABLE DOCUMENT ADD last_order_update VARCHAR(25)`);
-		console.log("Column last_order_update added");
+		const result = await DbRequest(`SELECT FIRST 1 ID FROM DOCUMENT`);
+		console.log("DB health check OK:", result);
 	} catch (err: any) {
-		console.log("addColl (column may already exist):", err?.message || err);
-	}
-	try {
-		await deleteTrigger();
-	} catch (err: any) {
-		console.log("deleteTrigger (may not exist):", err?.message || err);
-	}
-	try {
-		await createTrigger();
-	} catch (err: any) {
-		console.log("createTrigger:", err?.message || err);
+		console.error("DB health check FAILED:", err?.message || err);
+		process.exit(1);
 	}
 	console.log("init done");
 	process.exit(0);

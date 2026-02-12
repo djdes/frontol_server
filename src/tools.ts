@@ -106,68 +106,6 @@ export const readFile = async (name: string) => {
 		return { error: "err" };
 	}
 };
-export const addColl = () => {
-	DbRequest(`ALTER TABLE DOCUMENT ADD last_order_update VARCHAR(25)`);
-	// DbRequest(`ALTER TABLE DOCUMENT DROP LAST_UP`)
-};
-
-export const createTrigger = async () => {
-	const res = await DbRequest(`create trigger on_orders_change for DOCUMENT
-    before insert or update
-as
-  begin
-    new.last_order_update = CURRENT_TIMESTAMP;
-  end`).catch((err) => {
-		console.log("createTriger_err", err);
-	});
-	console.log("createTriger", res);
-	saveTriggders();
-};
-// createTrigger();
-
-export const deleteTrigger = async () => {
-	const res = await DbRequest(`DROP trigger on_orders_change`).catch(
-		(err) => {
-			console.log("createTriger_err", err);
-		}
-	);
-	console.log("res deleteTrigger", res);
-	saveTriggders();
-};
-// deleteTrigger();
-
-export const saveTriggders = () => {
-	DbRequest(`SELECT RDB$TRIGGER_NAME AS trigger_name,
-    RDB$RELATION_NAME AS table_name,
-    RDB$TRIGGER_SOURCE AS trigger_body,
-    CASE RDB$TRIGGER_TYPE
-     WHEN 1 THEN 'BEFORE'
-     WHEN 2 THEN 'AFTER'
-     WHEN 3 THEN 'BEFORE'
-     WHEN 4 THEN 'AFTER'
-     WHEN 5 THEN 'BEFORE'
-     WHEN 6 THEN 'AFTER'
-    END AS trigger_type,
-    CASE RDB$TRIGGER_TYPE
-     WHEN 1 THEN 'INSERT'
-     WHEN 2 THEN 'INSERT'
-     WHEN 3 THEN 'UPDATE'
-     WHEN 4 THEN 'UPDATE'
-     WHEN 5 THEN 'DELETE'
-     WHEN 6 THEN 'DELETE'
-    END AS trigger_event,
-    CASE RDB$TRIGGER_INACTIVE
-     WHEN 1 THEN 0 ELSE 1
-    END AS trigger_enabled,
-    RDB$DESCRIPTION AS trigger_comment
-    FROM RDB$TRIGGERS`).then((res) => {
-		saveToFile("TRIGGERS", res);
-		// console.log("res_trig", res);
-	});
-};
-export const onOrdersChange = () => {
-	console.log("onOrdersChange");
-};
 
 export const getAllCols = async () => {
 	return new Promise((resolve, reject) => {

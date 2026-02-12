@@ -59,7 +59,7 @@ declare module tables {
 		CHNGFM: number;
 		UUID: string;
 		FULLPREPAYMENT: number;
-		LAST_ORDER_UPDATE: string;
+		LAST_ORDER_UPDATE?: string;
 		products?: any;
 		isCardPayment?: boolean;
 	}

@@ -1,6 +1,6 @@
 {
 	"name": "frontol_server",
-	"version": "1.8.24",
+	"version": "1.9.0",
 	"description": "",
 	"main": "index.js",
 	"dependencies": {

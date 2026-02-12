@@ -2,7 +2,7 @@ import {
 	Order,
 	Product,
 	clearRemovedProducts,
-	getOrdersFromDate,
+	getOrdersSinceId,
 } from "./index";
 import {
 	readFile,
