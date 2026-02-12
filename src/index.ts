@@ -283,8 +283,8 @@ const eventListener = async () => {
 		if (innerState.eventListenerinProgress) return;
 		if (innerState.checkOrdersUpdatesInProgress) return;
 		innerState.pollCount++;
-		// Heartbeat каждые 5 минут (60 циклов * 5 сек)
-		if (innerState.pollCount % 60 === 0) {
+		// Heartbeat каждые 10 сек (2 цикла * 5 сек)
+		if (innerState.pollCount % 2 === 0) {
 			const state = await readFile("state");
 			console.log(`[автообновление] работает, lastId: ${state.lastId || 0}, проверок: ${innerState.pollCount}`);
 		}
