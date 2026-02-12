@@ -36,7 +36,6 @@ export interface Order {
 const innerState = {
 	eventListenerinProgress: false,
 	checkOrdersUpdatesInProgress: false,
-	pollCount: 0,
 };
 
 const clearEmptyOrders = (_orders: Order[]) => {
@@ -282,12 +281,6 @@ const eventListener = async () => {
 	setInterval(async () => {
 		if (innerState.eventListenerinProgress) return;
 		if (innerState.checkOrdersUpdatesInProgress) return;
-		innerState.pollCount++;
-		// Heartbeat каждые 10 сек (2 цикла * 5 сек)
-		if (innerState.pollCount % 2 === 0) {
-			const state = await readFile("state");
-			console.log(`[автообновление] работает, lastId: ${state.lastId || 0}, проверок: ${innerState.pollCount}`);
-		}
 		const changed_orders = await checkOrdersUpdatesOnce();
 		if (!changed_orders) return;
 		// saveToFile(`changed_orders`, changed_orders);
@@ -311,7 +304,7 @@ const eventListener = async () => {
 			// console.log(`sendToSite res.statusText`, res.statusText);
 		}
 		innerState.eventListenerinProgress = false;
-	}, 5000);
+	}, 10000);
 };
 const main = () => {
 	console.log(`version:1.9.0`);
