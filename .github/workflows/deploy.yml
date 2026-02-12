@@ -12,6 +12,9 @@ jobs:
         working-directory: C:\www\frontol_server
 
     steps:
+      - name: Fix git ownership
+        run: git config --global --add safe.directory C:/www/frontol_server
+
       - name: Pull latest code
         run: git pull origin master
 
