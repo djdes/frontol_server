@@ -25,26 +25,22 @@ export const DbRequest = async (query: string) => {
 	}
 	return new Promise((resolve, reject) => {
 		Firebird.attach(options, function (err: any, db: any) {
-			// console.log("existsSync", fs.existsSync(options.database));
-			// if (fs.existsSync(options.database)) {
-			// }
 			if (err) {
-				console.log("err", err);
-				reject(err);
+				console.error("Firebird attach error:", err.message || err);
+				return reject(err);
 			}
-			// console.log("db", db);
 			try {
 				db.query(query, function (err: any, result: any) {
-					// db.query(`SELECT * FROM SPRT`, function (err, result) {
 					if (err) {
-						console.log("err", err);
-						reject(err);
+						console.error("Firebird query error:", err.message || err);
+						db.detach();
+						return reject(err);
 					}
 					resolve(result);
 					db.detach();
 				});
 			} catch (err) {
-				console.log("err", err);
+				console.error("Firebird unexpected error:", err);
 				reject(err);
 			}
 		});

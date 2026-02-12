@@ -196,21 +196,23 @@ export const getOrdersSinceId = async (lastId: number) => {
 const sendToSite = async (_data: Orders) => {
 	if (debug) saveToFile(`debug/data`, _data);
 	const data = await prepareOrderData(_data);
-	// if (debug) saveToFile(`debug/newData`, data);
 	console.log("sendToSite", data.length);
-	// console.log("sendToSite test", data);
 	const config: any = await readFile("config");
 
-	console.log(
-		"sendToSite test",
-		data.filter((x) => x.STATE === "cancelled")
-	);
+	const cancelled = data.filter((x) => x.STATE === "cancelled");
+	if (cancelled.length > 0) {
+		console.log("sendToSite отмены:", cancelled.length);
+	}
 
-	return fetch(`https://admin.magday.ru/frontol/order.php`, {
+	const res = await fetch(`https://admin.magday.ru/frontol/order.php`, {
 		method: "post",
 		body: JSON.stringify({ orders: data, userId: config.userId }),
 	});
-	// .then(res => res.text()).then((res)=>{console.log("res" , res)});
+	if (!res.ok) {
+		throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+	}
+	console.log(`<<< Отправлено ${data.length} заказов, HTTP ${res.status}`);
+	return res;
 };
 const getState = async (): Promise<{ lastId: number }> => {
 	let state: any = await readFile("state");
@@ -248,12 +250,15 @@ const getState = async (): Promise<{ lastId: number }> => {
 	}
 };
 
-const checkOrdersUpdatesOnce = async () => {
+const checkOrdersUpdatesOnce = async (): Promise<{ orders: Orders; maxId: number } | false> => {
 	if (innerState.checkOrdersUpdatesInProgress) return false;
 	innerState.checkOrdersUpdatesInProgress = true;
-	const res = await checkOrdersUpdates();
-	innerState.checkOrdersUpdatesInProgress = false;
-	return res;
+	try {
+		const res = await checkOrdersUpdates();
+		return res;
+	} finally {
+		innerState.checkOrdersUpdatesInProgress = false;
+	}
 };
 const checkOrdersUpdates = async () => {
 	const state = await getState();
@@ -264,12 +269,6 @@ const checkOrdersUpdates = async () => {
 		| false;
 	if (orders === false) return;
 	if (orders.length > 0) {
-		const maxId = Math.max(...orders.map((o) => o.ID));
-		await saveToFile("state", { lastId: maxId });
-		setTimeout(() => {
-			saveToFile("stateBackup", { lastId: maxId });
-		}, 10000);
-
 		for (let i = 0; i < orders.length; i++) {
 			console.log("eventListener order", orders[i].CHEQUENUMBER, "ID:", orders[i].ID);
 			orders[i].products = await getProductsByOrderId(orders[i].ID);
@@ -283,49 +282,60 @@ const checkOrdersUpdates = async () => {
 			}
 		});
 
-		await saveToFile("debug/orders", orders);
+		if (debug) await saveToFile("debug/orders", orders);
 		if (_orders.length > 0) {
-			return _orders;
-		} else {
-			return false;
+			return { orders: _orders, maxId: Math.max(...orders.map((o) => o.ID)) };
 		}
-	} else {
-		return false;
 	}
+	return false;
 };
 const eventListener = async () => {
-	// let lastTimeUpdate = `2020-11-11 20:30:09.7460`;
-	// checkOrdersUpdates();
 	setInterval(async () => {
 		if (innerState.eventListenerinProgress) return;
 		if (innerState.checkOrdersUpdatesInProgress) return;
-		const changed_orders = await checkOrdersUpdatesOnce();
-		if (!changed_orders) return;
-		// saveToFile(`changed_orders`, changed_orders);
-		innerState.eventListenerinProgress = true;
-		const step = 50;
-		for (
-			let index = 0;
-			index < changed_orders.length;
-			index = index + step
-		) {
-			console.log(
-				`eventListener sendToSite ${index} of ${
-					changed_orders.length > index + step
-						? index + step
-						: changed_orders.length
-				} / ${changed_orders.length}`
-			);
-			const res = await sendToSite(
-				changed_orders.slice(index, index + step)
-			);
-			// console.log(`sendToSite res.statusText`, res.statusText);
+		try {
+			const result = await checkOrdersUpdatesOnce();
+			if (!result) return;
+			const { orders: changed_orders, maxId } = result as { orders: Orders; maxId: number };
+			innerState.eventListenerinProgress = true;
+			const step = 50;
+			for (
+				let index = 0;
+				index < changed_orders.length;
+				index = index + step
+			) {
+				console.log(
+					`eventListener sendToSite ${index} of ${
+						changed_orders.length > index + step
+							? index + step
+							: changed_orders.length
+					} / ${changed_orders.length}`
+				);
+				await sendToSite(
+					changed_orders.slice(index, index + step)
+				);
+			}
+			// Сохраняем state ТОЛЬКО после успешной отправки всех заказов
+			await saveToFile("state", { lastId: maxId });
+			setTimeout(() => {
+				saveToFile("stateBackup", { lastId: maxId });
+			}, 10000);
+		} catch (err: any) {
+			console.error("Ошибка цикла:", err?.message || err);
+			// state НЕ сохраняется — заказы будут повторно отправлены
+		} finally {
+			innerState.eventListenerinProgress = false;
 		}
-		innerState.eventListenerinProgress = false;
 	}, 10000);
 };
 const main = () => {
-	console.log(`version:1.9.0`);
+	process.on("unhandledRejection", (err) => {
+		console.error("Unhandled rejection:", err);
+	});
+	process.on("uncaughtException", (err) => {
+		console.error("Uncaught exception:", err);
+	});
+	console.log(`version:1.9.1`);
 	eventListener();
 };
 main();
