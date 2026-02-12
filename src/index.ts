@@ -32,7 +32,23 @@ export interface Order {
 	SUMMWD: number;
 	products: any[];
 	isCardPayment: boolean;
+	lastOrderUpdate: string;
 }
+const formatOrderDate = (doc: tables.RootObject): string => {
+	try {
+		const d = new Date(doc.CLOSEDATE);
+		const t = new Date(doc.CLOSETIME);
+		const year = d.getFullYear();
+		const month = String(d.getMonth() + 1).padStart(2, "0");
+		const day = String(d.getDate()).padStart(2, "0");
+		const hours = String(t.getHours()).padStart(2, "0");
+		const minutes = String(t.getMinutes()).padStart(2, "0");
+		const seconds = String(t.getSeconds()).padStart(2, "0");
+		return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+	} catch {
+		return new Date().toLocaleString("sv-SE");
+	}
+};
 const innerState = {
 	eventListenerinProgress: false,
 	checkOrdersUpdatesInProgress: false,
@@ -107,6 +123,7 @@ const prepareOrderData = async (_orders: Orders) => {
 				products: order.products,
 				isCardPayment: order.isCardPayment,
 				CHEQUENUMBER: order.CHEQUENUMBER,
+				lastOrderUpdate: formatOrderDate(order),
 			});
 			continue;
 		}
@@ -145,6 +162,7 @@ const prepareOrderData = async (_orders: Orders) => {
 			products: products,
 			isCardPayment: _order.isCardPayment,
 			CHEQUENUMBER: _order.CHEQUENUMBER,
+			lastOrderUpdate: formatOrderDate(_order),
 		});
 	} //end for
 
