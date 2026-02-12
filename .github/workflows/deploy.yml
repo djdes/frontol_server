@@ -46,6 +46,16 @@ jobs:
         run: node build/init.js
         continue-on-error: true
 
+      - name: Setup PM2 log rotation
+        run: |
+          $ErrorActionPreference = "SilentlyContinue"
+          pm2 install pm2-logrotate
+          pm2 set pm2-logrotate:max_size 10M
+          pm2 set pm2-logrotate:retain 3
+          pm2 set pm2-logrotate:compress true
+        shell: powershell
+        continue-on-error: true
+
       - name: Restart PM2 service
         run: |
           $ErrorActionPreference = "SilentlyContinue"

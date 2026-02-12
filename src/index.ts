@@ -36,6 +36,7 @@ export interface Order {
 const innerState = {
 	eventListenerinProgress: false,
 	checkOrdersUpdatesInProgress: false,
+	pollCount: 0,
 };
 
 const clearEmptyOrders = (_orders: Order[]) => {
@@ -160,7 +161,7 @@ export const getOrder = async (id: number) => {
 	if (!orders.length) {
 		return false;
 	}
-	console.log("getOrder id order", id, orders[0]);
+	if (debug) console.log("getOrder id order", id, orders[0]);
 	// saveToFile("debug/orders_selected", orders);
 	return orders[0];
 };
@@ -169,8 +170,8 @@ export const getOrdersSinceId = async (lastId: number) => {
 	const orders: any = await DbRequest(
 		`SELECT first 10000 * FROM DOCUMENT WHERE STATE = 1 AND ID > ${lastId} ORDER BY ID`
 	);
-	if (orders) {
-		console.log("getOrdersSinceId lastId orders.length", lastId, orders?.length);
+	if (orders?.length > 0) {
+		console.log(`>>> Найдено ${orders.length} новых заказов (lastId: ${lastId})`);
 	}
 	return orders;
 };
@@ -199,7 +200,6 @@ const getState = async (): Promise<{ lastId: number }> => {
 
 	// Valid new format
 	if (!state.error && (state.lastId || state.lastId === 0)) {
-		console.log("initial state", state);
 		return state;
 	}
 
@@ -207,7 +207,7 @@ const getState = async (): Promise<{ lastId: number }> => {
 	const stateBackup: any = await readFile("stateBackup");
 	if (!stateBackup.error && (stateBackup.lastId || stateBackup.lastId === 0)) {
 		await saveToFile("state", stateBackup);
-		console.log("initial state (from backup)", stateBackup);
+		console.log("Восстановлено из бэкапа, lastId:", stateBackup.lastId);
 		return stateBackup;
 	}
 
@@ -241,7 +241,6 @@ const checkOrdersUpdatesOnce = async () => {
 const checkOrdersUpdates = async () => {
 	const state = await getState();
 	const lastId = state.lastId;
-	console.log("lastId", lastId);
 
 	const orders = (await getOrdersSinceId(lastId)) as
 		| Array<tables.RootObject>
@@ -283,7 +282,12 @@ const eventListener = async () => {
 	setInterval(async () => {
 		if (innerState.eventListenerinProgress) return;
 		if (innerState.checkOrdersUpdatesInProgress) return;
-		console.log("eventListener setInterval !eventListenerinProgress");
+		innerState.pollCount++;
+		// Heartbeat каждые 5 минут (60 циклов * 5 сек)
+		if (innerState.pollCount % 60 === 0) {
+			const state = await readFile("state");
+			console.log(`[автообновление] работает, lastId: ${state.lastId || 0}, проверок: ${innerState.pollCount}`);
+		}
 		const changed_orders = await checkOrdersUpdatesOnce();
 		if (!changed_orders) return;
 		// saveToFile(`changed_orders`, changed_orders);
@@ -307,7 +311,6 @@ const eventListener = async () => {
 			// console.log(`sendToSite res.statusText`, res.statusText);
 		}
 		innerState.eventListenerinProgress = false;
-		console.log("changed_orders", changed_orders);
 	}, 5000);
 };
 const main = () => {
