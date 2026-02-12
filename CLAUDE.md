@@ -22,7 +22,7 @@ Frontol Server - Node.js/TypeScript service that bridges Frontol 6 POS system (F
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ FRONTOL 6 POS SYSTEM                                            │
-│ Database: Firebird (C:\DB\MAIN.GDB)                             │
+│ Database: Firebird (D:\FRONTOL_DB\MAIN.GDB)                             │
 │ Tables: DOCUMENT (orders), TRANZT (items), TRAUTH (payments)    │
 └──────────────────────┬──────────────────────────────────────────┘
                        │
@@ -69,7 +69,7 @@ Logs location:
 ```json
 {
   "userId": 25,                    // WooCommerce user ID for orders
-  "database": "C:\\DB\\MAIN.GDB"   // Firebird database path
+  "database": "D:\\FRONTOL_DB\\MAIN.GDB"   // Firebird database path
 }
 ```
 
@@ -92,7 +92,7 @@ Tracks last processed order timestamp for incremental sync.
 - Port: 3050
 - User: SYSDBA
 - Password: masterkey
-- Database: from config.json or `C:\DB\MAIN.GDB`
+- Database: from config.json or `D:\FRONTOL_DB\MAIN.GDB`
 
 **Key tables**:
 - `DOCUMENT` - Orders (STATE, ID, SUMM, SUMMWD, CHEQUENUMBER)
@@ -229,14 +229,14 @@ saveAllCols()                       // Export all table samples
 ### GitHub Actions (.github/workflows/deploy.yml)
 
 Triggers on push to `master`:
-1. Checkout code
+1. git stash + git pull в C:\www\frontol_server
 2. Setup Node.js 18
 3. npm ci
 4. npm run build
 5. PM2 restart (or start if not running)
 6. PM2 save
 
-Self-hosted runner on POS terminal.
+Self-hosted runner на CHINAMI-2PJMP22.
 
 ### Manual Deployment
 
